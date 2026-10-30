@@ -1,0 +1,8 @@
+{
+  "name": "LembraAI - Agenda Inteligente e Acessível",
+  "description": "Agenda inteligente com foco em acessibilidade, prevenção de esquecimentos, entrada por voz e foto (IA), lembretes no Telegram e total privacidade multiusuário.",
+  "requestFramePermissions": ["camera", "microphone"],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

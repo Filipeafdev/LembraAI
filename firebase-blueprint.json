@@ -1,0 +1,80 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User preferences, accessibility settings, and Telegram Chat ID for alerts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string", "maxLength": 100 },
+        "telegramChatId": { "type": "string", "maxLength": 50 },
+        "telegramNotificationsEnabled": { "type": "boolean" },
+        "highContrast": { "type": "boolean" },
+        "fontSize": { "type": "string", "enum": ["normal", "large", "xlarge"] },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "email", "createdAt"]
+    },
+    "Appointment": {
+      "title": "Appointment",
+      "description": "Calendar commitments and reminders created manually or via AI voice/image",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "title": { "type": "string", "maxLength": 200, "minLength": 1 },
+        "description": { "type": "string", "maxLength": 1000 },
+        "category": { "type": "string", "enum": ["saude", "trabalho", "familia", "financas", "estudos", "pessoal", "outro"] },
+        "location": { "type": "string", "maxLength": 200 },
+        "date": { "type": "string" },
+        "time": { "type": "string" },
+        "dateTimeIso": { "type": "string" },
+        "recurrence": { "type": "string", "enum": ["none", "weekly", "monthly"] },
+        "recurrenceDayOfWeek": { "type": "number" },
+        "recurrenceDayOfMonth": { "type": "number" },
+        "remindersMinutesBefore": {
+          "type": "array"
+        },
+        "status": { "type": "string", "enum": ["pending", "completed", "cancelled"] },
+        "source": { "type": "string", "enum": ["manual", "image", "voice"] },
+        "telegramNotificationSent": { "type": "boolean" },
+        "completedAt": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "title", "date", "time", "status", "recurrence", "createdAt"]
+    },
+    "ReminderLog": {
+      "title": "ReminderLog",
+      "description": "Log entry recording Telegram dispatch status",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "appointmentId": { "type": "string" },
+        "appointmentTitle": { "type": "string", "maxLength": 200 },
+        "chatId": { "type": "string" },
+        "reminderType": { "type": "string" },
+        "status": { "type": "string", "enum": ["delivered", "failed"] },
+        "sentAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "appointmentId", "status", "sentAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "Individual user preferences and isolated telegram config"
+    },
+    "/appointments/{appointmentId}": {
+      "schema": "Appointment",
+      "description": "Appointments owned and isolated per user"
+    },
+    "/reminders_history/{reminderId}": {
+      "schema": "ReminderLog",
+      "description": "History of Telegram notifications sent to the user"
+    }
+  }
+}

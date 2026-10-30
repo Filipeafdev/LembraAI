@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-scale: 1rem;
+  }
+
+  html {
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Accessible font size tiers */
+  body.font-large {
+    font-size: 1.125rem;
+  }
+
+  body.font-xlarge {
+    font-size: 1.25rem;
+  }
+
+  /* High contrast mode for seniors & visual accessibility */
+  body.high-contrast {
+    background-color: #000000 !important;
+    color: #ffffff !important;
+  }
+
+  body.high-contrast .bg-white {
+    background-color: #121212 !important;
+    color: #ffffff !important;
+    border-color: #facc15 !important;
+  }
+
+  body.high-contrast .bg-slate-50,
+  body.high-contrast .bg-slate-100 {
+    background-color: #1e1e1e !important;
+    color: #ffffff !important;
+  }
+
+  body.high-contrast .text-slate-900,
+  body.high-contrast .text-slate-800,
+  body.high-contrast .text-slate-700 {
+    color: #ffffff !important;
+  }
+
+  body.high-contrast .text-slate-600,
+  body.high-contrast .text-slate-500 {
+    color: #e2e8f0 !important;
+  }
+
+  body.high-contrast .border-slate-200,
+  body.high-contrast .border-slate-100 {
+    border-color: #475569 !important;
+  }
+
+  body.high-contrast button {
+    border-width: 2px !important;
+  }
+
+  /* Touch accessibility */
+  button, a, input, select, textarea {
+    min-height: 44px;
+  }
+}
+
+/* Custom subtle animations */
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.85; transform: scale(1.03); }
+}
+
+.animate-pulse-subtle {
+  animation: pulse-subtle 2s infinite ease-in-out;
+}

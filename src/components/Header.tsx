@@ -189,19 +189,15 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
 
           {/* User Profile / Auth Button */}
-          {user ? (
+          {user || profile ? (
             <button
-              onClick={() => {
-                if (confirm("Deseja sair da sua conta?")) {
-                  logout();
-                }
-              }}
-              title={`Conectado como: ${profile?.displayName || user.email}. Clique para sair.`}
+              onClick={() => logout()}
+              title={`Conectado como: ${profile?.displayName || user?.email || profile?.email}. Clique para sair.`}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 hover:bg-rose-50 hover:text-rose-700 text-slate-700 text-xs font-semibold transition"
             >
               <UserIcon className="w-4 h-4 text-emerald-600" />
-              <span className="hidden md:inline max-w-[100px] truncate">
-                {profile?.displayName || user.email?.split("@")[0]}
+              <span className="hidden md:inline max-w-[110px] truncate">
+                {profile?.displayName || user?.email?.split("@")[0] || profile?.email?.split("@")[0]}
               </span>
               <LogOut className="w-3.5 h-3.5 text-slate-400" />
             </button>

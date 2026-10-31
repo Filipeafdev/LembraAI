@@ -34,6 +34,7 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
   const [showPostponeMenu, setShowPostponeMenu] = useState(false);
   const [sendingTelegram, setSendingTelegram] = useState(false);
   const [telegramStatus, setTelegramStatus] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const categoryMeta = CATEGORIES[appointment.category] || CATEGORIES.outro;
   const timing = formatRelativeTime(appointment.date, appointment.time);
@@ -260,17 +261,30 @@ export const AppointmentCard: React.FC<AppointmentCardProps> = ({
         </button>
 
         {/* Excluir */}
-        <button
-          onClick={() => {
-            if (confirm(`Deseja excluir "${appointment.title}"?`)) {
-              deleteAppointment(appointment.id);
-            }
-          }}
-          title="Excluir este compromisso"
-          className="p-2.5 rounded-2xl border border-slate-200 hover:bg-rose-50 hover:text-rose-700 text-slate-400 transition"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
+        {confirmDelete ? (
+          <div className="flex items-center gap-1 bg-rose-50 p-1 rounded-2xl border border-rose-200">
+            <button
+              onClick={() => deleteAppointment(appointment.id)}
+              className="px-2.5 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold transition shadow-xs"
+            >
+              Excluir?
+            </button>
+            <button
+              onClick={() => setConfirmDelete(false)}
+              className="px-2 py-1.5 rounded-xl text-slate-500 hover:bg-slate-200 text-xs font-semibold"
+            >
+              Não
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirmDelete(true)}
+            title="Excluir este compromisso"
+            className="p-2.5 rounded-2xl border border-slate-200 hover:bg-rose-50 hover:text-rose-700 text-slate-400 transition"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        )}
       </div>
     </div>
   );

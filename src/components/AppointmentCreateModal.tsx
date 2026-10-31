@@ -258,7 +258,7 @@ export const AppointmentCreateModal: React.FC<AppointmentCreateModalProps> = ({
   const handleSaveAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      alert("Por favor, digite o título do compromisso.");
+      setAiError("Por favor, digite o título do compromisso.");
       return;
     }
 
@@ -279,9 +279,10 @@ export const AppointmentCreateModal: React.FC<AppointmentCreateModalProps> = ({
       setTitle("");
       setLocation("");
       setDescription("");
+      setAiError("");
       onClose();
     } catch (err: any) {
-      alert("Erro ao salvar compromisso: " + (err.message || "Tente novamente"));
+      setAiError("Erro ao salvar compromisso: " + (err.message || "Tente novamente"));
     }
   };
 

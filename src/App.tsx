@@ -98,7 +98,7 @@ function MainDashboard() {
       {/* Header */}
       <Header
         onOpenTelegramSettings={() => {
-          if (!user) setIsAuthOpen(true);
+          if (!user && !profile) setIsAuthOpen(true);
           else setIsTelegramOpen(true);
         }}
         onOpenAuth={() => setIsAuthOpen(true)}
@@ -107,7 +107,7 @@ function MainDashboard() {
       {/* Main Container */}
       <main className="max-w-4xl w-full mx-auto px-4 py-5 flex-1 space-y-5">
         {/* Unauthenticated Notice Banner */}
-        {!user && (
+        {!user && !profile && (
           <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-3xl p-5 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
@@ -132,7 +132,7 @@ function MainDashboard() {
         )}
 
         {/* Telegram Quick Status Warning (If logged in but no chat ID) */}
-        {user && !profile?.telegramChatId && (
+        {(user || profile) && !profile?.telegramChatId && (
           <div className="bg-amber-50 border-2 border-amber-300 rounded-3xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
@@ -161,7 +161,7 @@ function MainDashboard() {
           {/* Quick Voice */}
           <button
             onClick={() => {
-              if (!user) {
+              if (!user && !profile) {
                 setIsAuthOpen(true);
                 return;
               }
@@ -185,7 +185,7 @@ function MainDashboard() {
           {/* Quick Photo / OCR */}
           <button
             onClick={() => {
-              if (!user) {
+              if (!user && !profile) {
                 setIsAuthOpen(true);
                 return;
               }
@@ -209,7 +209,7 @@ function MainDashboard() {
           {/* Quick Manual */}
           <button
             onClick={() => {
-              if (!user) {
+              if (!user && !profile) {
                 setIsAuthOpen(true);
                 return;
               }
@@ -450,7 +450,7 @@ function MainDashboard() {
                 <div className="pt-2">
                   <button
                     onClick={() => {
-                      if (!user) setIsAuthOpen(true);
+                      if (!user && !profile) setIsAuthOpen(true);
                       else setIsCreateOpen(true);
                     }}
                     className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs transition shadow-md shadow-emerald-600/20"
@@ -487,7 +487,7 @@ function MainDashboard() {
           {/* Central Big Add Button */}
           <button
             onClick={() => {
-              if (!user) setIsAuthOpen(true);
+              if (!user && !profile) setIsAuthOpen(true);
               else setIsCreateOpen(true);
             }}
             className="w-14 h-14 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow-lg shadow-emerald-600/30 -mt-6 hover:scale-105 transition"
@@ -497,7 +497,7 @@ function MainDashboard() {
 
           <button
             onClick={() => {
-              if (!user) setIsAuthOpen(true);
+              if (!user && !profile) setIsAuthOpen(true);
               else setIsTelegramOpen(true);
             }}
             className="flex-1 py-2 rounded-2xl flex flex-col items-center gap-1 text-[11px] font-bold text-slate-500"

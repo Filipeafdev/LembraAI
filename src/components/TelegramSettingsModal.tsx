@@ -69,7 +69,7 @@ export const TelegramSettingsModal: React.FC<TelegramSettingsModalProps> = ({
   if (!isOpen) return null;
 
   const handleSave = async () => {
-    if (!user) return;
+    if (!user && !profile) return;
     setIsSaving(true);
     try {
       await updateTelegramChatId(chatIdInput.trim());

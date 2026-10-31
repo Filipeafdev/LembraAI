@@ -9,7 +9,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Sparkles,
-  Info,
+  Loader2,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext.tsx";
 
@@ -41,58 +41,45 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
         if (!name.trim()) {
           throw new Error("Por favor, digite seu nome.");
         }
-        const res = await registerWithEmail(email.trim(), password, name.trim());
-        setLoading(false);
-        if (res.isLocalFallback) {
-          setSuccessNotice("Conta criada e isolada com sucesso!");
-          setTimeout(() => onClose(), 800);
-        } else {
+        await registerWithEmail(email.trim(), password, name.trim());
+        setSuccessNotice("Conta criada com sucesso! Bem-vindo(a) ao LembraAI.");
+        setTimeout(() => {
+          setLoading(false);
           onClose();
-        }
+        }, 600);
       } else {
         await loginWithEmail(email.trim(), password);
-        setLoading(false);
-        onClose();
+        setSuccessNotice("Login realizado com sucesso!");
+        setTimeout(() => {
+          setLoading(false);
+          onClose();
+        }, 500);
       }
     } catch (err: any) {
       setLoading(false);
-      let msg = err.message || "Falha na autenticação.";
-      if (err.code === "auth/invalid-email" || msg.includes("invalid-email")) {
-        msg = "Endereço de e-mail inválido.";
-      } else if (
-        err.code === "auth/user-not-found" ||
-        err.code === "auth/wrong-password" ||
-        err.code === "auth/invalid-credential"
-      ) {
-        msg = "E-mail ou senha incorretos.";
-      } else if (err.code === "auth/email-already-in-use") {
-        msg = "Este e-mail já está cadastrado. Alterne para Entrar abaixo.";
-      } else if (err.code === "auth/weak-password") {
-        msg = "A senha deve conter no mínimo 6 dígitos.";
-      }
-      setErrorMessage(msg);
+      setErrorMessage(err.message || "Erro ao processar. Verifique os dados digitados.");
     }
   };
 
-  const handleGoogleLogin = async () => {
+  const handleGoogleLogin = async (targetEmail?: string) => {
     setErrorMessage("");
+    setSuccessNotice("");
     setLoading(true);
     try {
-      await loginWithGoogle();
-      setLoading(false);
-      onClose();
+      await loginWithGoogle(targetEmail);
+      setSuccessNotice("Conectado com sucesso via Google!");
+      setTimeout(() => {
+        setLoading(false);
+        onClose();
+      }, 500);
     } catch (err: any) {
       setLoading(false);
-      setErrorMessage(
-        err.message?.includes("popup-closed-by-user")
-          ? "A janela de login foi fechada antes da confirmação."
-          : err.message || "Erro ao conectar com Google."
-      );
+      setErrorMessage(err.message || "Erro ao autenticar com Google.");
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
       <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
         {/* Header */}
         <div className="bg-gradient-to-tr from-slate-900 to-slate-800 text-white p-6 relative">
@@ -112,16 +99,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
             {isRegister ? "Criar sua Conta no LembraAI" : "Entrar na sua Conta"}
           </h2>
           <p className="text-xs text-slate-300 mt-1">
-            Cada usuário possui sua própria agenda 100% privada e independente.
+            Cada usuário possui sua própria agenda 100% isolada e segura.
           </p>
         </div>
 
         {/* Form Body */}
         <div className="p-6 space-y-4">
-          {/* Success banner */}
+          {/* Success Banner */}
           {successNotice && (
             <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 text-xs flex items-center gap-2 animate-in fade-in font-bold">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
               <span>{successNotice}</span>
             </div>
           )}
@@ -132,26 +119,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <div>
                 <p className="font-bold">{errorMessage}</p>
-                <p className="text-[11px] text-rose-700 mt-0.5">
-                  Dica: Para acesso instantâneo sem configurações, você pode usar o botão <b>"Entrar com Google"</b> abaixo.
-                </p>
               </div>
             </div>
           )}
 
-          {/* Primary Option: Google Sign-in (Pre-configured) */}
-          <div className="space-y-1.5">
+          {/* 1-Click Fast Google Sign-in */}
+          <div className="space-y-2">
             <div className="flex items-center justify-between text-xs text-slate-600 font-semibold px-1">
-              <span>Opção Mais Rápida:</span>
+              <span>Acesso Rápido em 1 Clique:</span>
               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full flex items-center gap-1">
-                <Sparkles className="w-2.5 h-2.5" /> 1 Clique
+                <Sparkles className="w-2.5 h-2.5" /> Recomendado
               </span>
             </div>
+
+            {/* Personalized 1-Click Google Button */}
             <button
               type="button"
-              onClick={handleGoogleLogin}
+              onClick={() => handleGoogleLogin("filipeafdev@gmail.com")}
               disabled={loading}
-              className="w-full py-3.5 px-4 rounded-2xl border-2 border-emerald-500/40 bg-emerald-50/50 hover:bg-emerald-50 text-slate-900 font-bold text-xs sm:text-sm flex items-center justify-center gap-3 transition shadow-xs hover:border-emerald-600"
+              className="w-full py-3.5 px-4 rounded-2xl border-2 border-emerald-500/50 bg-emerald-50/70 hover:bg-emerald-100/70 text-slate-900 font-bold text-xs sm:text-sm flex items-center justify-center gap-3 transition shadow-xs hover:border-emerald-600 group"
             >
               <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
                 <path
@@ -171,7 +157,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
                 />
               </svg>
-              <span>Continuar com o Google</span>
+              <span>Entrar com filipeafdev@gmail.com</span>
             </button>
           </div>
 
@@ -181,7 +167,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               <div className="w-full border-t border-slate-200"></div>
             </div>
             <div className="relative flex justify-center text-xs">
-              <span className="bg-white px-3 text-slate-400 font-medium">ou crie com E-mail e Senha</span>
+              <span className="bg-white px-3 text-slate-400 font-medium">
+                ou crie com qualquer E-mail e Senha
+              </span>
             </div>
           </div>
 
@@ -197,7 +185,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
                     required
                     value={name}
                     onChange={(e) => setName(e.target.value)}
-                    placeholder="Ex: Maria Silva"
+                    placeholder="Ex: Filipe / Seu Nome"
                     className="w-full pl-10 pr-4 py-2.5 rounded-2xl border-2 border-slate-200 focus:border-emerald-600 focus:outline-hidden text-sm font-semibold text-slate-800 placeholder:text-slate-400"
                   />
                 </div>
@@ -239,8 +227,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
               disabled={loading}
               className="w-full py-3.5 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm flex items-center justify-center gap-2 transition shadow-md shadow-emerald-600/20 mt-1"
             >
-              <span>{loading ? "Processando..." : isRegister ? "Confirmar Cadastro" : "Entrar na Agenda"}</span>
-              <ArrowRight className="w-4 h-4" />
+              {loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Processando...</span>
+                </>
+              ) : (
+                <>
+                  <span>
+                    {isRegister ? "Confirmar e Criar Minha Conta" : "Entrar na Agenda"}
+                  </span>
+                  <ArrowRight className="w-4 h-4" />
+                </>
+              )}
             </button>
           </form>
 

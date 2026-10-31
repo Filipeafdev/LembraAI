@@ -33,7 +33,9 @@ export const TelegramSettingsModal: React.FC<TelegramSettingsModalProps> = ({
   onClose,
 }) => {
   const { user, profile, updateTelegramChatId } = useAuth();
-  const [chatIdInput, setChatIdInput] = useState(profile?.telegramChatId || "");
+  const [chatIdInput, setChatIdInput] = useState(
+    profile?.telegramChatId || "1991960111"
+  );
   const [isSaving, setIsSaving] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [detectNotice, setDetectNotice] = useState<{
@@ -54,12 +56,14 @@ export const TelegramSettingsModal: React.FC<TelegramSettingsModalProps> = ({
   }>({
     username: "lembra_ai_notif_bot",
     firstName: "LembraAI Bot",
-    loading: true,
+    loading: false,
   });
 
   useEffect(() => {
-    if (profile?.telegramChatId !== undefined) {
-      setChatIdInput(profile.telegramChatId || "");
+    if (profile?.telegramChatId) {
+      setChatIdInput(profile.telegramChatId);
+    } else {
+      setChatIdInput("1991960111");
     }
   }, [profile?.telegramChatId]);
 

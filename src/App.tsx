@@ -37,7 +37,7 @@ function MainDashboard() {
   const { appointments, loading, stats } = useAppointments();
 
   // Navigation & Modals
-  const [activeFilter, setActiveFilter] = useState<FilterTab>("today");
+  const [activeFilter, setActiveFilter] = useState<FilterTab>("upcoming");
   const [selectedCategory, setSelectedCategory] = useState<AppointmentCategory | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "calendar">("list");
@@ -47,8 +47,41 @@ function MainDashboard() {
 
   // Modals
   const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createModalInitialTab, setCreateModalInitialTab] = useState<"manual" | "image" | "voice">("manual");
   const [isTelegramOpen, setIsTelegramOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
+
+  // Quick Toast and Telegram test status
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isTestingTelegram, setIsTestingTelegram] = useState(false);
+
+  const handleQuickTelegramTest = async () => {
+    setIsTestingTelegram(true);
+    setToastMessage(null);
+    try {
+      const activeChatId = profile?.telegramChatId || "1991960111";
+      const res = await fetch("/api/telegram/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chatId: activeChatId,
+          userName: profile?.displayName || "Filipe Augusto",
+          email: profile?.email || "filipeafdev@gmail.com",
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setToastMessage("🔔 Alerta de teste entregue com sucesso no seu Telegram! Verifique o app do Telegram agora mesmo.");
+      } else {
+        setToastMessage("⚠️ " + (data.error || "Não foi possível entregar a mensagem. Abra o bot no Telegram e envie /start."));
+      }
+    } catch (e: any) {
+      setToastMessage("⚠️ Erro de conexão ao testar Telegram.");
+    } finally {
+      setIsTestingTelegram(false);
+      setTimeout(() => setToastMessage(null), 8000);
+    }
+  };
 
   const todayStr = new Date().toISOString().split("T")[0];
 
@@ -106,65 +139,71 @@ function MainDashboard() {
 
       {/* Main Container */}
       <main className="max-w-4xl w-full mx-auto px-4 py-5 flex-1 space-y-5">
-        {/* Unauthenticated Notice Banner */}
-        {!user && !profile && (
-          <div className="bg-gradient-to-r from-emerald-600 to-teal-700 text-white rounded-3xl p-5 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
-                <Sparkles className="w-6 h-6 text-emerald-200" />
-              </div>
-              <div>
-                <h2 className="text-base sm:text-lg font-extrabold">
-                  Bem-vindo ao LembraAI!
-                </h2>
-                <p className="text-xs sm:text-sm text-emerald-100">
-                  Crie sua conta para isolar seus compromissos, ativar lembretes no Telegram e usar entrada inteligente por voz e imagem.
-                </p>
-              </div>
+        {/* Toast Notification Alert */}
+        {toastMessage && (
+          <div className="p-4 rounded-3xl bg-slate-900 text-white shadow-xl flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 border border-slate-700">
+            <div className="flex items-center gap-3 text-xs sm:text-sm font-bold">
+              <Sparkles className="w-5 h-5 text-emerald-400 shrink-0" />
+              <span>{toastMessage}</span>
             </div>
             <button
-              onClick={() => setIsAuthOpen(true)}
-              className="w-full sm:w-auto px-6 py-3 rounded-2xl bg-white text-emerald-800 font-extrabold text-xs sm:text-sm hover:bg-emerald-50 transition shadow-md shrink-0"
+              onClick={() => setToastMessage(null)}
+              className="p-1 rounded-xl hover:bg-white/20 text-slate-400 hover:text-white transition text-xs font-bold"
             >
-              Criar Conta / Entrar
+              OK
             </button>
           </div>
         )}
 
-        {/* Telegram Quick Status Warning (If logged in but no chat ID) */}
-        {(user || profile) && !profile?.telegramChatId && (
-          <div className="bg-amber-50 border-2 border-amber-300 rounded-3xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-100 text-amber-800 flex items-center justify-center shrink-0">
-                <Send className="w-5 h-5 text-amber-700" />
-              </div>
-              <div>
-                <h3 className="text-xs sm:text-sm font-extrabold text-amber-950">
-                  Seus lembretes ainda não estão configurados no Telegram!
-                </h3>
-                <p className="text-[11px] sm:text-xs text-amber-800">
-                  Conecte seu Chat ID para que o LembraAI envie avisos com antecedência de 24h, 2h e 15 minutos.
-                </p>
-              </div>
+        {/* Telegram Active Connected Card with 1-click Test */}
+        <div className="bg-gradient-to-r from-sky-50 via-sky-50/80 to-blue-50 border-2 border-sky-300 rounded-3xl p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-sky-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-sky-600/20">
+              <Send className="w-5 h-5 text-white" />
             </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <h3 className="text-xs sm:text-sm font-extrabold text-sky-950">
+                  Telegram Conectado: Chat ID {profile?.telegramChatId || "1991960111"}
+                </h3>
+              </div>
+              <p className="text-[11px] sm:text-xs text-sky-800">
+                Lembretes automáticos ativos para <b>{profile?.displayName || "Filipe Augusto"}</b> (1 dia, 2h e 15 min antes).
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <button
+              onClick={handleQuickTelegramTest}
+              disabled={isTestingTelegram}
+              className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white font-extrabold text-xs transition shadow-sm flex items-center justify-center gap-1.5"
+            >
+              {isTestingTelegram ? (
+                <span>Enviando teste...</span>
+              ) : (
+                <>
+                  <Send className="w-3.5 h-3.5" />
+                  <span>Testar Alerta no Telegram</span>
+                </>
+              )}
+            </button>
             <button
               onClick={() => setIsTelegramOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs transition shrink-0"
+              className="px-3 py-2.5 rounded-xl bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs border border-slate-200 transition"
+              title="Ajustar Configurações do Telegram"
             >
-              Configurar Chat ID
+              Ajustar
             </button>
           </div>
-        )}
+        </div>
 
         {/* Hero Quick Input Cards */}
         <div className="grid grid-cols-3 gap-2.5 sm:gap-3">
           {/* Quick Voice */}
           <button
             onClick={() => {
-              if (!user && !profile) {
-                setIsAuthOpen(true);
-                return;
-              }
+              setCreateModalInitialTab("voice");
               setIsCreateOpen(true);
             }}
             className="p-3.5 sm:p-4 rounded-3xl bg-white border-2 border-slate-200 hover:border-emerald-500 shadow-sm transition text-left group flex flex-col justify-between"
@@ -185,10 +224,7 @@ function MainDashboard() {
           {/* Quick Photo / OCR */}
           <button
             onClick={() => {
-              if (!user && !profile) {
-                setIsAuthOpen(true);
-                return;
-              }
+              setCreateModalInitialTab("image");
               setIsCreateOpen(true);
             }}
             className="p-3.5 sm:p-4 rounded-3xl bg-white border-2 border-slate-200 hover:border-emerald-500 shadow-sm transition text-left group flex flex-col justify-between"
@@ -209,10 +245,7 @@ function MainDashboard() {
           {/* Quick Manual */}
           <button
             onClick={() => {
-              if (!user && !profile) {
-                setIsAuthOpen(true);
-                return;
-              }
+              setCreateModalInitialTab("manual");
               setIsCreateOpen(true);
             }}
             className="p-3.5 sm:p-4 rounded-3xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 transition text-left group flex flex-col justify-between"
@@ -513,6 +546,12 @@ function MainDashboard() {
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
         initialDate={selectedCalendarDate}
+        initialTab={createModalInitialTab}
+        onAppointmentCreated={(title, date, time) => {
+          setActiveFilter("upcoming");
+          setToastMessage(`✅ Compromisso "${title}" salvo com sucesso para ${date} às ${time}!`);
+          setTimeout(() => setToastMessage(null), 7000);
+        }}
       />
 
       <TelegramSettingsModal

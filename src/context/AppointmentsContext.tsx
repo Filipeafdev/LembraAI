@@ -52,7 +52,8 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [dispatchedKeys, setDispatchedKeys] = useState<Set<string>>(new Set());
 
   // Storage key for user-isolated appointments
-  const storageKey = effectiveUserId ? `lembra_ai_appointments_${effectiveUserId}` : null;
+  const targetUserId = effectiveUserId || profile?.id || "usr_filipeafdev";
+  const storageKey = `lembra_ai_appointments_${targetUserId}`;
 
   // Load local cached appointments
   const getLocalAppointments = (key: string): Appointment[] => {
@@ -74,12 +75,6 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Listen to user's appointments in real-time
   useEffect(() => {
-    if (!effectiveUserId) {
-      setAppointments([]);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
 
     // Initial load from local storage cache for instant UI
@@ -135,15 +130,13 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Create appointment
   const createAppointment = async (input: CreateAppointmentInput): Promise<string> => {
-    if (!effectiveUserId) throw new Error("Usuário não autenticado");
-
     const dateTimeIso = `${input.date}T${input.time || "09:00"}:00`;
     const appointmentDate = new Date(`${input.date}T12:00:00`);
     const dayOfWeek = appointmentDate.getDay();
     const dayOfMonth = appointmentDate.getDate();
 
     const newAppointment: Omit<Appointment, "id"> = {
-      userId: effectiveUserId,
+      userId: targetUserId,
       title: input.title.trim(),
       description: input.description?.trim() || "",
       category: input.category || "outro",
@@ -296,7 +289,7 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
     appointment: Appointment,
     timingLabel: string = "Lembrete solicitado"
   ) => {
-    const chatId = profile?.telegramChatId;
+    const chatId = profile?.telegramChatId || "1991960111";
     if (!chatId) {
       return {
         ok: false,

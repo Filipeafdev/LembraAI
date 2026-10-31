@@ -33,6 +33,8 @@ interface AppointmentCreateModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialDate?: string;
+  initialTab?: "manual" | "image" | "voice";
+  onAppointmentCreated?: (title: string, date: string, time: string) => void;
 }
 
 type TabType = "manual" | "image" | "voice";
@@ -41,10 +43,12 @@ export const AppointmentCreateModal: React.FC<AppointmentCreateModalProps> = ({
   isOpen,
   onClose,
   initialDate,
+  initialTab = "manual",
+  onAppointmentCreated,
 }) => {
   const { createAppointment } = useAppointments();
 
-  const [activeTab, setActiveTab] = useState<TabType>("manual");
+  const [activeTab, setActiveTab] = useState<TabType>(initialTab);
 
   // Form Fields
   const [title, setTitle] = useState("");
@@ -114,6 +118,7 @@ export const AppointmentCreateModal: React.FC<AppointmentCreateModalProps> = ({
   // Reset modal when opened
   useEffect(() => {
     if (isOpen) {
+      if (initialTab) setActiveTab(initialTab);
       if (initialDate) setDate(initialDate);
       setExtractedReviewMode(false);
       setAiError("");
@@ -121,7 +126,7 @@ export const AppointmentCreateModal: React.FC<AppointmentCreateModalProps> = ({
       setVoiceTranscript("");
       setAiSourceBadge(null);
     }
-  }, [isOpen, initialDate]);
+  }, [isOpen, initialDate, initialTab]);
 
   if (!isOpen) return null;
 
@@ -263,10 +268,14 @@ export const AppointmentCreateModal: React.FC<AppointmentCreateModalProps> = ({
     }
 
     try {
+      const savedTitle = title.trim();
+      const savedDate = date;
+      const savedTime = time;
+
       await createAppointment({
-        title: title.trim(),
-        date,
-        time,
+        title: savedTitle,
+        date: savedDate,
+        time: savedTime,
         category,
         location: location.trim(),
         description: description.trim(),
@@ -281,6 +290,9 @@ export const AppointmentCreateModal: React.FC<AppointmentCreateModalProps> = ({
       setDescription("");
       setAiError("");
       onClose();
+      if (onAppointmentCreated) {
+        onAppointmentCreated(savedTitle, savedDate, savedTime);
+      }
     } catch (err: any) {
       setAiError("Erro ao salvar compromisso: " + (err.message || "Tente novamente"));
     }

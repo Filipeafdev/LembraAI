@@ -31,13 +31,32 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+export const DEFAULT_USER_PROFILE: UserProfile = {
+  id: "usr_filipeafdev",
+  email: "filipeafdev@gmail.com",
+  displayName: "Filipe Augusto",
+  telegramChatId: "1991960111",
+  telegramNotificationsEnabled: true,
+  highContrast: false,
+  fontSize: "normal",
+  createdAt: "2026-10-31T00:00:00.000Z",
+  updatedAt: new Date().toISOString(),
+};
+
 // Helper to get all registered users from storage
 const getStoredUsers = (): Record<string, any> => {
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_USERS_KEY);
-    return raw ? JSON.parse(raw) : {};
+    const users = raw ? JSON.parse(raw) : {};
+    if (!users["filipeafdev@gmail.com"]) {
+      users["filipeafdev@gmail.com"] = {
+        ...DEFAULT_USER_PROFILE,
+        password: "",
+      };
+    }
+    return users;
   } catch (e) {
-    return {};
+    return { "filipeafdev@gmail.com": DEFAULT_USER_PROFILE };
   }
 };
 
@@ -54,19 +73,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Restore local profile if exists
+  // Restore local profile if exists, or initialize default
   const restoreLocalProfile = () => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_PROFILE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as UserProfile;
+        // If telegramChatId is empty on saved profile, populate default 1991960111
+        if (!parsed.telegramChatId) {
+          parsed.telegramChatId = "1991960111";
+          localStorage.setItem(LOCAL_STORAGE_PROFILE_KEY, JSON.stringify(parsed));
+        }
         setProfile(parsed);
         return parsed;
       }
     } catch (e) {
       console.warn("Could not parse local profile:", e);
     }
-    return null;
+    // Initialize default profile
+    localStorage.setItem(LOCAL_STORAGE_PROFILE_KEY, JSON.stringify(DEFAULT_USER_PROFILE));
+    setProfile(DEFAULT_USER_PROFILE);
+    return DEFAULT_USER_PROFILE;
   };
 
   const persistLocalProfile = (p: UserProfile | null) => {
@@ -381,7 +408,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     restoreLocalProfile();
   };
 
-  const effectiveUserId = user?.uid || profile?.id || null;
+  const effectiveUserId = user?.uid || profile?.id || DEFAULT_USER_PROFILE.id;
 
   return (
     <AuthContext.Provider

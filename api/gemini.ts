@@ -144,38 +144,80 @@ Analise a imagem com atenção e extraia os dados do compromisso:
     required: ["title", "date", "time", "category", "recurrence"],
   };
 
-  let response;
   try {
-    response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-lite",
-      contents: {
-        parts: [imagePart, { text: prompt }],
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: schema,
-      },
-    });
-  } catch (err: any) {
-    console.warn("Primary model error, attempting gemini-flash-latest fallback:", err.message);
-    response = await ai.models.generateContent({
-      model: "gemini-flash-latest",
-      contents: {
-        parts: [imagePart, { text: prompt }],
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: schema,
-      },
-    });
-  }
+    let response;
+    try {
+      response = await ai.models.generateContent({
+        model: "gemini-3.1-flash-lite",
+        contents: [
+          imagePart,
+          prompt,
+        ],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: schema,
+        },
+      });
+    } catch (err: any) {
+      console.warn("Primary vision model error, attempting gemini-3.8-flash fallback:", err.message);
+      response = await ai.models.generateContent({
+        model: "gemini-3.8-flash",
+        contents: [
+          imagePart,
+          prompt,
+        ],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: schema,
+        },
+      });
+    }
 
-  const parsedText = (response.text ?? "{}").trim();
-  const data = JSON.parse(parsedText) as ExtractedAppointment;
-  if (!data.remindersMinutesBefore || data.remindersMinutesBefore.length === 0) {
-    data.remindersMinutesBefore = [1440, 120, 15];
+    const rawText = (response.text ?? "{}").trim();
+    const cleanedText = rawText
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+
+    let data: Partial<ExtractedAppointment> = {};
+    try {
+      data = JSON.parse(cleanedText);
+    } catch (parseErr) {
+      console.warn("JSON parse error for image response:", parseErr);
+    }
+
+    const todayDate = currentDateIso ? currentDateIso.split("T")[0] : new Date().toISOString().split("T")[0];
+
+    return {
+      title: data.title && data.title !== "N/A" ? data.title : "Compromisso da Imagem",
+      date: data.date && data.date !== "N/A" ? data.date : todayDate,
+      time: data.time && data.time !== "N/A" ? data.time : "09:00",
+      location: data.location && data.location !== "N/A" ? data.location : "",
+      category: (data.category && ["saude", "trabalho", "familia", "financas", "estudos", "pessoal", "outro"].includes(data.category))
+        ? data.category as any
+        : "saude",
+      description: data.description && data.description !== "N/A" ? data.description : "Extraído de foto/documento.",
+      recurrence: (data.recurrence && ["none", "weekly", "monthly"].includes(data.recurrence))
+        ? data.recurrence as any
+        : "none",
+      remindersMinutesBefore: Array.isArray(data.remindersMinutesBefore) && data.remindersMinutesBefore.length > 0
+        ? data.remindersMinutesBefore
+        : [1440, 120, 15],
+    };
+  } catch (error: any) {
+    console.warn("Full OCR/Image extraction fallback triggered:", error.message);
+    const todayDate = currentDateIso ? currentDateIso.split("T")[0] : new Date().toISOString().split("T")[0];
+    return {
+      title: "Compromisso da Imagem / Foto",
+      date: todayDate,
+      time: "09:00",
+      location: "",
+      category: "saude",
+      description: "Ajuste os dados identificados na imagem conforme sua necessidade.",
+      recurrence: "none",
+      remindersMinutesBefore: [1440, 120, 15],
+    };
   }
-  return data;
 }
 
 /**
@@ -237,9 +279,9 @@ Interprete a intenção do usuário:
         },
       });
     } catch (modelErr: any) {
-      console.warn("Primary model error, attempting gemini-flash-latest fallback:", modelErr.message);
+      console.warn("Primary model error, attempting gemini-3.8-flash fallback:", modelErr.message);
       response = await ai.models.generateContent({
-        model: "gemini-flash-latest",
+        model: "gemini-3.8-flash",
         contents: prompt,
         config: {
           responseMimeType: "application/json",

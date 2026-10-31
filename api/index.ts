@@ -47,9 +47,15 @@ apiApp.post("/gemini/parse-image", async (req: Request, res: Response) => {
     }
 
     const refDate = referenceDate || new Date().toISOString();
-    const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
+    
+    // Extract real MIME type and base64 payload cleanly
+    const mimeMatch = imageBase64.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+)/i);
+    const resolvedMime = mimeMatch ? mimeMatch[1] : (mimeType || "image/jpeg");
+    const cleanBase64 = imageBase64.includes(";base64,")
+      ? imageBase64.split(";base64,")[1].trim()
+      : imageBase64.trim();
 
-    const extracted = await parseAppointmentFromImage(cleanBase64, mimeType, refDate);
+    const extracted = await parseAppointmentFromImage(cleanBase64, resolvedMime, refDate);
     return sendJson(res, 200, { success: true, data: extracted });
   } catch (error: any) {
     console.error("Error parsing appointment from image:", error);

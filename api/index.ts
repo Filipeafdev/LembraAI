@@ -2,6 +2,7 @@ import express, { Request, Response } from "express";
 import { parseAppointmentFromImage, parseAppointmentFromVoiceText } from "./gemini.ts";
 import {
   fetchBotInfo,
+  fetchRecentUpdates,
   sendTestAlert,
   sendAppointmentAlert,
   getBotToken,
@@ -72,6 +73,16 @@ apiRouter.get("/telegram/bot-info", async (_req: Request, res: Response) => {
     return res.json(info);
   } catch (error: any) {
     return res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+// Telegram: Get recent incoming messages to detect chat ID automatically
+apiRouter.get("/telegram/recent-chats", async (_req: Request, res: Response) => {
+  try {
+    const result = await fetchRecentUpdates();
+    return res.json(result);
+  } catch (error: any) {
+    return res.status(500).json({ ok: false, chats: [], error: error.message });
   }
 });
 

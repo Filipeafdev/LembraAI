@@ -11,6 +11,14 @@ export interface TelegramBotInfo {
   error?: string;
 }
 
+export interface TelegramRecentChat {
+  chatId: string;
+  name: string;
+  username?: string;
+  lastMessage?: string;
+  date?: number;
+}
+
 export async function fetchBotInfo(): Promise<TelegramBotInfo> {
   const token = getBotToken();
   try {
@@ -29,18 +37,75 @@ export async function fetchBotInfo(): Promise<TelegramBotInfo> {
   }
 }
 
+/**
+ * Reads recent incoming messages from the bot to automatically detect the user's numeric Chat ID
+ */
+export async function fetchRecentUpdates(): Promise<{
+  ok: boolean;
+  chats: TelegramRecentChat[];
+  error?: string;
+}> {
+  const token = getBotToken();
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/getUpdates?limit=50&offset=-25`);
+    const data = await res.json();
+    if (data.ok && Array.isArray(data.result)) {
+      const chatsMap = new Map<string, TelegramRecentChat>();
+      for (const update of data.result) {
+        const msg = update.message || update.edited_message || update.channel_post;
+        if (msg && msg.chat) {
+          const chatId = String(msg.chat.id);
+          const name =
+            [msg.chat.first_name, msg.chat.last_name].filter(Boolean).join(" ") ||
+            msg.chat.title ||
+            "Usuário Telegram";
+          chatsMap.set(chatId, {
+            chatId,
+            name,
+            username: msg.chat.username,
+            lastMessage: msg.text || "",
+            date: msg.date,
+          });
+        }
+      }
+      return { ok: true, chats: Array.from(chatsMap.values()).reverse() };
+    }
+    return { ok: false, chats: [], error: data.description };
+  } catch (err: any) {
+    return { ok: false, chats: [], error: err.message };
+  }
+}
+
+/**
+ * Sends formatted message to Telegram with human-readable error explanations
+ */
 export async function sendTelegramMessage(
   chatId: string | number,
   text: string,
   parseMode: "Markdown" | "HTML" = "HTML"
 ): Promise<{ ok: boolean; messageId?: number; description?: string }> {
   const token = getBotToken();
+  const rawChatId = String(chatId).trim();
+
+  // Validate format
+  if (!rawChatId) {
+    return { ok: false, description: "Chat ID não informado. Preencha o seu Chat ID." };
+  }
+
+  if (rawChatId.startsWith("@")) {
+    return {
+      ok: false,
+      description:
+        "Atenção: O Telegram não aceita @username para envio privado. Você deve informar o Chat ID numérico (ex: 123456789). Use o botão 'Detectar Chat ID' abaixo.",
+    };
+  }
+
   try {
     const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        chat_id: String(chatId).trim(),
+        chat_id: rawChatId,
         text,
         parse_mode: parseMode,
       }),
@@ -50,12 +115,24 @@ export async function sendTelegramMessage(
     if (data.ok) {
       return { ok: true, messageId: data.result.message_id };
     } else {
-      console.error("Telegram API Error:", data);
-      return { ok: false, description: data.description || "Erro desconhecido do Telegram" };
+      console.warn("Telegram API Error Response:", data);
+      let desc = data.description || "Erro retornado pela API do Telegram";
+
+      if (desc.includes("chat not found")) {
+        desc =
+          "Chat não encontrado. O Telegram exige que você abra o bot (@lembra_ai_notif_bot) e clique em 'Iniciar / Start' antes que ele possa lhe enviar mensagens.";
+      } else if (desc.includes("bot was blocked by the user")) {
+        desc =
+          "O bot foi bloqueado no seu Telegram. Desbloqueie o bot @lembra_ai_notif_bot para receber os lembretes.";
+      } else if (desc.includes("chat_id is empty")) {
+        desc = "O Chat ID não pode estar vazio.";
+      }
+
+      return { ok: false, description: desc };
     }
   } catch (err: any) {
     console.error("Failed to send telegram message:", err);
-    return { ok: false, description: err.message || "Erro de conexão com o Telegram" };
+    return { ok: false, description: err.message || "Erro de conexão ao contatar os servidores do Telegram." };
   }
 }
 
@@ -105,7 +182,6 @@ export async function sendAppointmentAlert(
     monthly: "Mensal",
   };
 
-  // Format date to Brazilian format
   const [year, month, day] = (appointment.date || "").split("-");
   const formattedDate = year && month && day ? `${day}/${month}/${year}` : appointment.date;
 

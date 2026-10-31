@@ -60,23 +60,19 @@ function MainDashboard() {
     setToastMessage(null);
     try {
       const activeChatId = profile?.telegramChatId || "1991960111";
-      const res = await fetch("/api/telegram/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chatId: activeChatId,
-          userName: profile?.displayName || "Filipe Augusto",
-          email: profile?.email || "filipeafdev@gmail.com",
-        }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        setToastMessage("🔔 Alerta de teste entregue com sucesso no seu Telegram! Verifique o app do Telegram agora mesmo.");
+      const { sendTelegramTestAlert } = await import("./utils/telegramClient.ts");
+      const result = await sendTelegramTestAlert(
+        activeChatId,
+        profile?.displayName || "Filipe Augusto",
+        profile?.email || "filipeafdev@gmail.com"
+      );
+      if (result.ok) {
+        setToastMessage("🔔 Alerta entregue com sucesso no seu Telegram (Chat ID " + activeChatId + ")!");
       } else {
-        setToastMessage("⚠️ " + (data.error || "Não foi possível entregar a mensagem. Abra o bot no Telegram e envie /start."));
+        setToastMessage("⚠️ " + (result.description || "Não foi possível entregar a mensagem. Abra o bot no Telegram e envie /start."));
       }
     } catch (e: any) {
-      setToastMessage("⚠️ Erro de conexão ao testar Telegram.");
+      setToastMessage("⚠️ Erro ao conectar com o Telegram.");
     } finally {
       setIsTestingTelegram(false);
       setTimeout(() => setToastMessage(null), 8000);

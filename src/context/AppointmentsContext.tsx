@@ -47,18 +47,53 @@ const AppointmentsContext = createContext<AppointmentsContextType | undefined>(u
 
 export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, profile, effectiveUserId } = useAuth();
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [appointments, setAppointments] = useState<Appointment[]>(() => {
+    try {
+      const targetUserId = effectiveUserId || profile?.id || "usr_filipeafdev";
+      const userKey = `lembra_ai_appointments_${targetUserId}`;
+      const saved = localStorage.getItem(userKey) || localStorage.getItem("lembra_ai_appointments_master");
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {}
+    // Seed initial accessible appointment for first-time ease
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().split("T")[0];
+    const initialSample: Appointment = {
+      id: "apt_sample_dentista",
+      userId: "usr_filipeafdev",
+      title: "Consulta no Dentista (Dr. Eduardo)",
+      description: "Levar carteirinha do convênio e exames anteriores",
+      category: "saude",
+      location: "Av. Paulista, 1200 - Sala 42",
+      date: tomorrowStr,
+      time: "15:00",
+      dateTimeIso: `${tomorrowStr}T15:00:00`,
+      recurrence: "none",
+      recurrenceDayOfWeek: tomorrow.getDay(),
+      recurrenceDayOfMonth: tomorrow.getDate(),
+      remindersMinutesBefore: [1440, 120, 15],
+      status: "pending",
+      source: "manual",
+      telegramNotificationSent: false,
+      completedAt: null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    return [initialSample];
+  });
+  const [loading, setLoading] = useState<boolean>(false);
   const [dispatchedKeys, setDispatchedKeys] = useState<Set<string>>(new Set());
 
   // Storage key for user-isolated appointments
-  const targetUserId = effectiveUserId || profile?.id || "usr_filipeafdev";
+  const targetUserId = user?.uid || effectiveUserId || profile?.id || "usr_filipeafdev";
   const storageKey = `lembra_ai_appointments_${targetUserId}`;
 
   // Load local cached appointments
   const getLocalAppointments = (key: string): Appointment[] => {
     try {
-      const data = localStorage.getItem(key);
+      const data = localStorage.getItem(key) || localStorage.getItem("lembra_ai_appointments_master");
       return data ? JSON.parse(data) : [];
     } catch (e) {
       return [];
@@ -68,6 +103,7 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const saveLocalAppointments = (key: string, list: Appointment[]) => {
     try {
       localStorage.setItem(key, JSON.stringify(list));
+      localStorage.setItem("lembra_ai_appointments_master", JSON.stringify(list));
     } catch (e) {
       console.warn("Could not save to localStorage:", e);
     }
@@ -75,9 +111,7 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Listen to user's appointments in real-time
   useEffect(() => {
-    setLoading(true);
-
-    // Initial load from local storage cache for instant UI
+    // Initial check from local storage cache
     if (storageKey) {
       const cached = getLocalAppointments(storageKey);
       if (cached.length > 0) {
@@ -93,40 +127,29 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
       const unsubscribe = onSnapshot(
         q,
         (snapshot) => {
-          const list: Appointment[] = [];
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data() as Appointment;
-            list.push({ ...data, id: docSnap.id });
-          });
+          if (!snapshot.empty) {
+            const list: Appointment[] = [];
+            snapshot.forEach((docSnap) => {
+              const data = docSnap.data() as Appointment;
+              list.push({ ...data, id: docSnap.id });
+            });
 
-          // Sort by dateTimeIso ascending
-          list.sort((a, b) => (a.dateTimeIso > b.dateTimeIso ? 1 : -1));
-          setAppointments(list);
-          if (storageKey) {
+            // Sort by dateTimeIso ascending
+            list.sort((a, b) => (a.dateTimeIso > b.dateTimeIso ? 1 : -1));
+            setAppointments(list);
             saveLocalAppointments(storageKey, list);
           }
           setLoading(false);
         },
         (error) => {
           console.warn("Firestore onSnapshot error (using local cache):", error.message);
-          if (storageKey) {
-            const cached = getLocalAppointments(storageKey);
-            setAppointments(cached);
-          }
           setLoading(false);
         }
       );
 
       return () => unsubscribe();
-    } else {
-      // Local session user
-      if (storageKey) {
-        const cached = getLocalAppointments(storageKey);
-        setAppointments(cached);
-      }
-      setLoading(false);
     }
-  }, [user, effectiveUserId, storageKey]);
+  }, [user, storageKey]);
 
   // Create appointment
   const createAppointment = async (input: CreateAppointmentInput): Promise<string> => {
@@ -135,8 +158,10 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const dayOfWeek = appointmentDate.getDay();
     const dayOfMonth = appointmentDate.getDate();
 
+    const authorUid = user ? user.uid : targetUserId;
+
     const newAppointment: Omit<Appointment, "id"> = {
-      userId: targetUserId,
+      userId: authorUid,
       title: input.title.trim(),
       description: input.description?.trim() || "",
       category: input.category || "outro",
@@ -176,10 +201,11 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
     };
 
     setAppointments((prev) => {
-      const next = [...prev, fullAppointment].sort((a, b) =>
+      const filtered = prev.filter((p) => p.id !== generatedId);
+      const next = [...filtered, fullAppointment].sort((a, b) =>
         a.dateTimeIso > b.dateTimeIso ? 1 : -1
       );
-      if (storageKey) saveLocalAppointments(storageKey, next);
+      saveLocalAppointments(storageKey, next);
       return next;
     });
 
@@ -298,18 +324,10 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     try {
-      const res = await fetch("/api/telegram/send-reminder", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chatId,
-          appointment,
-          timingLabel,
-        }),
-      });
+      const { sendTelegramAppointmentAlert } = await import("../utils/telegramClient.ts");
+      const result = await sendTelegramAppointmentAlert(chatId, appointment, timingLabel);
 
-      const data = await res.json();
-      if (data.ok) {
+      if (result.ok) {
         if (user) {
           try {
             await addDoc(collection(db, "reminders_history"), {
@@ -327,7 +345,7 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
         }
         return { ok: true, message: "Lembrete enviado com sucesso para o Telegram!" };
       } else {
-        return { ok: false, message: data.error || "Falha ao enviar para o Telegram." };
+        return { ok: false, message: result.description || "Falha ao enviar para o Telegram." };
       }
     } catch (err: any) {
       return { ok: false, message: err.message || "Erro de conexão ao enviar lembrete." };

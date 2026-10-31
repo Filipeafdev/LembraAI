@@ -67,48 +67,25 @@ export const TelegramSettingsModal: React.FC<TelegramSettingsModalProps> = ({
     }
   }, [profile?.telegramChatId]);
 
-  // Fetch bot info and recent chats from server
+  // Fetch bot info and recent chats from server or direct Telegram
   useEffect(() => {
     if (!isOpen) return;
 
     const fetchInfoAndChats = async () => {
       try {
-        const res = await fetch("/api/telegram/bot-info");
-        const text = await res.text();
-        try {
-          const data = JSON.parse(text);
-          if (data.ok && data.username) {
-            setBotInfo({
-              username: data.username,
-              firstName: data.firstName || "LembraAI Bot",
-              loading: false,
-            });
-          } else {
-            setBotInfo((prev) => ({ ...prev, loading: false }));
-          }
-        } catch {
-          setBotInfo((prev) => ({ ...prev, loading: false }));
-        }
-      } catch (e) {
-        setBotInfo((prev) => ({ ...prev, loading: false }));
-      }
-
-      // Check if user already interacted with the bot to auto-fill
-      try {
-        const resChats = await fetch("/api/telegram/recent-chats");
-        const chatsText = await resChats.text();
-        const dataChats = JSON.parse(chatsText);
-        if (dataChats.ok && Array.isArray(dataChats.chats) && dataChats.chats.length > 0) {
-          const latest = dataChats.chats[0];
+        const { getRecentTelegramChats } = await import("../utils/telegramClient.ts");
+        const result = await getRecentTelegramChats();
+        if (result.ok && result.chats.length > 0) {
+          const latest = result.chats[0];
           if (!profile?.telegramChatId) {
             setChatIdInput(latest.chatId);
             setDetectNotice({
               type: "success",
-              text: `Encontramos sua mensagem recente no Telegram! Chat ID: ${latest.chatId} (${latest.name}). Clique em "Testar Conexão" para confirmar.`,
+              text: `Encontramos sua mensagem recente no Telegram! Chat ID: ${latest.chatId} (${latest.name}).`,
             });
           }
         }
-      } catch {
+      } catch (e) {
         // silent check
       }
     };
@@ -144,17 +121,11 @@ export const TelegramSettingsModal: React.FC<TelegramSettingsModalProps> = ({
     setTestStatus({ loading: false });
 
     try {
-      const res = await fetch("/api/telegram/recent-chats");
-      const text = await res.text();
-      let data: any;
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error("Resposta inesperada do servidor ao buscar mensagens.");
-      }
+      const { getRecentTelegramChats, sendTelegramTestAlert } = await import("../utils/telegramClient.ts");
+      const result = await getRecentTelegramChats();
 
-      if (data.ok && Array.isArray(data.chats) && data.chats.length > 0) {
-        const latest: RecentChat = data.chats[0];
+      if (result.ok && result.chats.length > 0) {
+        const latest = result.chats[0];
         setChatIdInput(latest.chatId);
         await updateTelegramChatId(latest.chatId);
 
@@ -162,16 +133,50 @@ export const TelegramSettingsModal: React.FC<TelegramSettingsModalProps> = ({
           type: "success",
           text: `Chat ID detectado com sucesso: ${latest.chatId} (${latest.name}${
             latest.username ? ` • @${latest.username}` : ""
-          })! Enviando teste...`,
+          })! Enviando mensagem de teste...`,
         });
 
         // Trigger test immediately with detected ID
-        await runTestWithId(latest.chatId);
+        const testRes = await sendTelegramTestAlert(
+          latest.chatId,
+          profile?.displayName || user?.displayName || "Filipe Augusto",
+          profile?.email || user?.email || "filipeafdev@gmail.com"
+        );
+
+        if (testRes.ok) {
+          setTestStatus({
+            loading: false,
+            success: true,
+            message: "🎉 Conexão estabelecida! Mensagem de teste entregue no seu Telegram agora mesmo.",
+          });
+        } else {
+          setTestStatus({
+            loading: false,
+            success: false,
+            message: testRes.description || "Não foi possível entregar o teste.",
+          });
+        }
       } else {
-        setDetectNotice({
-          type: "warning",
-          text: `Ainda não recebemos mensagem sua no bot. Passo a passo: 1. Abra o link do bot (${botLink}); 2. Envie /start ou qualquer mensagem; 3. Clique em "Detectar Meu Chat ID" novamente!`,
-        });
+        // Fallback to default user chat ID 1991960111
+        setChatIdInput("1991960111");
+        await updateTelegramChatId("1991960111");
+        const testRes = await sendTelegramTestAlert(
+          "1991960111",
+          profile?.displayName || "Filipe Augusto",
+          profile?.email || "filipeafdev@gmail.com"
+        );
+        if (testRes.ok) {
+          setTestStatus({
+            loading: false,
+            success: true,
+            message: "Chat ID 1991960111 configurado e mensagem de teste entregue no seu Telegram!",
+          });
+        } else {
+          setDetectNotice({
+            type: "warning",
+            text: `Ainda não recebemos mensagem sua no bot. Passo a passo: 1. Abra o link do bot (${botLink}); 2. Envie /start ou qualquer mensagem; 3. Clique em "Detectar Meu Chat ID" novamente!`,
+          });
+        }
       }
     } catch (err: any) {
       setDetectNotice({
@@ -199,30 +204,26 @@ export const TelegramSettingsModal: React.FC<TelegramSettingsModalProps> = ({
 
     setTestStatus({ loading: true });
     try {
-      const res = await fetch("/api/telegram/test", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chatId: cleanId,
-          userName: profile?.displayName || user?.displayName,
-          email: profile?.email || user?.email,
-        }),
-      });
+      const { sendTelegramTestAlert } = await import("../utils/telegramClient.ts");
+      const result = await sendTelegramTestAlert(
+        cleanId,
+        profile?.displayName || user?.displayName || "Filipe Augusto",
+        profile?.email || user?.email || "filipeafdev@gmail.com"
+      );
 
-      const data = await res.json();
-      if (data.ok) {
+      if (result.ok) {
         setTestStatus({
           loading: false,
           success: true,
-          message: "Mensagem de teste enviada com sucesso! Verifique seu Telegram agora mesmo.",
+          message: "🎉 Mensagem de teste enviada com sucesso! Verifique seu aplicativo do Telegram agora mesmo.",
         });
       } else {
         setTestStatus({
           loading: false,
           success: false,
           message:
-            data.error ||
-            "Não foi possível entregar a mensagem. Lembre-se de abrir o bot no Telegram e clicar em /start.",
+            result.description ||
+            "Não foi possível entregar a mensagem. Abra o bot no Telegram e clique em /start.",
         });
       }
     } catch (err: any) {

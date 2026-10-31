@@ -8,11 +8,10 @@ import {
   updateDoc,
   deleteDoc,
   doc,
-  setDoc,
 } from "firebase/firestore";
-import { db, handleFirestoreError, OperationType } from "../lib/firebase.ts";
+import { db } from "../lib/firebase.ts";
 import { useAuth } from "./AuthContext.tsx";
-import { Appointment, AppointmentCategory, RecurrenceType, ReminderLog } from "../types/index.ts";
+import { Appointment, AppointmentCategory, RecurrenceType } from "../types/index.ts";
 
 interface CreateAppointmentInput {
   title: string;
@@ -47,50 +46,96 @@ interface AppointmentsContextType {
 const AppointmentsContext = createContext<AppointmentsContextType | undefined>(undefined);
 
 export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, profile } = useAuth();
+  const { user, profile, effectiveUserId } = useAuth();
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [dispatchedKeys, setDispatchedKeys] = useState<Set<string>>(new Set());
 
+  // Storage key for user-isolated appointments
+  const storageKey = effectiveUserId ? `lembra_ai_appointments_${effectiveUserId}` : null;
+
+  // Load local cached appointments
+  const getLocalAppointments = (key: string): Appointment[] => {
+    try {
+      const data = localStorage.getItem(key);
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      return [];
+    }
+  };
+
+  const saveLocalAppointments = (key: string, list: Appointment[]) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(list));
+    } catch (e) {
+      console.warn("Could not save to localStorage:", e);
+    }
+  };
+
   // Listen to user's appointments in real-time
   useEffect(() => {
-    if (!user) {
+    if (!effectiveUserId) {
       setAppointments([]);
       setLoading(false);
       return;
     }
 
     setLoading(true);
-    const colRef = collection(db, "appointments");
-    const q = query(colRef, where("userId", "==", user.uid));
 
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const list: Appointment[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data() as Appointment;
-          list.push({ ...data, id: docSnap.id });
-        });
-
-        // Sort by dateTimeIso ascending
-        list.sort((a, b) => (a.dateTimeIso > b.dateTimeIso ? 1 : -1));
-        setAppointments(list);
-        setLoading(false);
-      },
-      (error) => {
-        console.error("Error fetching appointments:", error);
-        handleFirestoreError(error, OperationType.LIST, "appointments");
-        setLoading(false);
+    // Initial load from local storage cache for instant UI
+    if (storageKey) {
+      const cached = getLocalAppointments(storageKey);
+      if (cached.length > 0) {
+        setAppointments(cached);
       }
-    );
+    }
 
-    return () => unsubscribe();
-  }, [user]);
+    // If Firebase user is logged in, attach Firestore listener
+    if (user) {
+      const colRef = collection(db, "appointments");
+      const q = query(colRef, where("userId", "==", user.uid));
+
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const list: Appointment[] = [];
+          snapshot.forEach((docSnap) => {
+            const data = docSnap.data() as Appointment;
+            list.push({ ...data, id: docSnap.id });
+          });
+
+          // Sort by dateTimeIso ascending
+          list.sort((a, b) => (a.dateTimeIso > b.dateTimeIso ? 1 : -1));
+          setAppointments(list);
+          if (storageKey) {
+            saveLocalAppointments(storageKey, list);
+          }
+          setLoading(false);
+        },
+        (error) => {
+          console.warn("Firestore onSnapshot error (using local cache):", error.message);
+          if (storageKey) {
+            const cached = getLocalAppointments(storageKey);
+            setAppointments(cached);
+          }
+          setLoading(false);
+        }
+      );
+
+      return () => unsubscribe();
+    } else {
+      // Local session user
+      if (storageKey) {
+        const cached = getLocalAppointments(storageKey);
+        setAppointments(cached);
+      }
+      setLoading(false);
+    }
+  }, [user, effectiveUserId, storageKey]);
 
   // Create appointment
   const createAppointment = async (input: CreateAppointmentInput): Promise<string> => {
-    if (!user) throw new Error("Usuário não autenticado");
+    if (!effectiveUserId) throw new Error("Usuário não autenticado");
 
     const dateTimeIso = `${input.date}T${input.time || "09:00"}:00`;
     const appointmentDate = new Date(`${input.date}T12:00:00`);
@@ -98,7 +143,7 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const dayOfMonth = appointmentDate.getDate();
 
     const newAppointment: Omit<Appointment, "id"> = {
-      userId: user.uid,
+      userId: effectiveUserId,
       title: input.title.trim(),
       description: input.description?.trim() || "",
       category: input.category || "outro",
@@ -121,48 +166,81 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
       updatedAt: new Date().toISOString(),
     };
 
-    try {
-      const docRef = await addDoc(collection(db, "appointments"), newAppointment);
-      return docRef.id;
-    } catch (error) {
-      handleFirestoreError(error, OperationType.CREATE, "appointments");
+    let generatedId = "apt_" + Math.random().toString(36).substring(2, 11);
+
+    if (user) {
+      try {
+        const docRef = await addDoc(collection(db, "appointments"), newAppointment);
+        generatedId = docRef.id;
+      } catch (error) {
+        console.warn("Firestore addDoc failed, storing locally:", error);
+      }
     }
+
+    const fullAppointment: Appointment = {
+      ...newAppointment,
+      id: generatedId,
+    };
+
+    setAppointments((prev) => {
+      const next = [...prev, fullAppointment].sort((a, b) =>
+        a.dateTimeIso > b.dateTimeIso ? 1 : -1
+      );
+      if (storageKey) saveLocalAppointments(storageKey, next);
+      return next;
+    });
+
+    return generatedId;
   };
 
   // Update appointment
   const updateAppointment = async (id: string, updates: Partial<Appointment>) => {
-    if (!user) return;
-    try {
-      const docRef = doc(db, "appointments", id);
-      const payload = {
-        ...updates,
-        updatedAt: new Date().toISOString(),
-      };
-      if (updates.date || updates.time) {
-        const current = appointments.find((a) => a.id === id);
-        const newDate = updates.date || current?.date || "";
-        const newTime = updates.time || current?.time || "09:00";
-        payload.dateTimeIso = `${newDate}T${newTime}:00`;
+    if (!effectiveUserId) return;
+
+    if (user) {
+      try {
+        const docRef = doc(db, "appointments", id);
+        const payload = {
+          ...updates,
+          updatedAt: new Date().toISOString(),
+        };
+        if (updates.date || updates.time) {
+          const current = appointments.find((a) => a.id === id);
+          const newDate = updates.date || current?.date || "";
+          const newTime = updates.time || current?.time || "09:00";
+          payload.dateTimeIso = `${newDate}T${newTime}:00`;
+        }
+        await updateDoc(docRef, payload);
+      } catch (error) {
+        console.warn("Firestore updateDoc error, falling back locally:", error);
       }
-      await updateDoc(docRef, payload);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `appointments/${id}`);
     }
+
+    setAppointments((prev) => {
+      const next = prev.map((item) => {
+        if (item.id === id) {
+          const newDate = updates.date || item.date;
+          const newTime = updates.time || item.time;
+          return {
+            ...item,
+            ...updates,
+            dateTimeIso: `${newDate}T${newTime}:00`,
+            updatedAt: new Date().toISOString(),
+          };
+        }
+        return item;
+      });
+      if (storageKey) saveLocalAppointments(storageKey, next);
+      return next;
+    });
   };
 
   // Mark as completed
   const markAsCompleted = async (id: string) => {
-    if (!user) return;
-    try {
-      const docRef = doc(db, "appointments", id);
-      await updateDoc(docRef, {
-        status: "completed",
-        completedAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `appointments/${id}`);
-    }
+    await updateAppointment(id, {
+      status: "completed",
+      completedAt: new Date().toISOString(),
+    });
   };
 
   // Postpone appointment (+1 hour, +24 hours, etc.)
@@ -170,47 +248,47 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
     id: string,
     { hours = 0, days = 0 }: { hours?: number; days?: number }
   ) => {
-    if (!user) return;
     const target = appointments.find((a) => a.id === id);
     if (!target) return;
 
-    try {
-      const dateObj = new Date(`${target.date}T${target.time}:00`);
-      if (hours > 0) {
-        dateObj.setHours(dateObj.getHours() + hours);
-      }
-      if (days > 0) {
-        dateObj.setDate(dateObj.getDate() + days);
-      }
-
-      const pad = (n: number) => String(n).padStart(2, "0");
-      const newDate = `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}`;
-      const newTime = `${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}`;
-      const newDateTimeIso = `${newDate}T${newTime}:00`;
-
-      const docRef = doc(db, "appointments", id);
-      await updateDoc(docRef, {
-        date: newDate,
-        time: newTime,
-        dateTimeIso: newDateTimeIso,
-        status: "pending",
-        completedAt: null,
-        updatedAt: new Date().toISOString(),
-      });
-    } catch (error) {
-      handleFirestoreError(error, OperationType.UPDATE, `appointments/${id}`);
+    const dateObj = new Date(`${target.date}T${target.time}:00`);
+    if (hours > 0) {
+      dateObj.setHours(dateObj.getHours() + hours);
     }
+    if (days > 0) {
+      dateObj.setDate(dateObj.getDate() + days);
+    }
+
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const newDate = `${dateObj.getFullYear()}-${pad(dateObj.getMonth() + 1)}-${pad(dateObj.getDate())}`;
+    const newTime = `${pad(dateObj.getHours())}:${pad(dateObj.getMinutes())}`;
+
+    await updateAppointment(id, {
+      date: newDate,
+      time: newTime,
+      status: "pending",
+      completedAt: null,
+    });
   };
 
   // Delete appointment
   const deleteAppointment = async (id: string) => {
-    if (!user) return;
-    try {
-      const docRef = doc(db, "appointments", id);
-      await deleteDoc(docRef);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.DELETE, `appointments/${id}`);
+    if (!effectiveUserId) return;
+
+    if (user) {
+      try {
+        const docRef = doc(db, "appointments", id);
+        await deleteDoc(docRef);
+      } catch (error) {
+        console.warn("Firestore deleteDoc error:", error);
+      }
     }
+
+    setAppointments((prev) => {
+      const next = prev.filter((item) => item.id !== id);
+      if (storageKey) saveLocalAppointments(storageKey, next);
+      return next;
+    });
   };
 
   // Send manual reminder or test trigger via Telegram
@@ -239,7 +317,6 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
       const data = await res.json();
       if (data.ok) {
-        // Record in reminders_history
         if (user) {
           try {
             await addDoc(collection(db, "reminders_history"), {
@@ -266,7 +343,7 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Background Automatic Dispatcher Check Loop
   useEffect(() => {
-    if (!user || !profile?.telegramChatId || !profile.telegramNotificationsEnabled) {
+    if (!effectiveUserId || !profile?.telegramChatId || !profile.telegramNotificationsEnabled) {
       return;
     }
 
@@ -281,15 +358,12 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
         const aptTimestamp = aptDate.getTime();
         const diffMinutes = Math.round((aptTimestamp - currentTimestamp) / (1000 * 60));
 
-        // For each reminder time (e.g. 1440m, 120m, 15m, 0m)
         const reminders = apt.remindersMinutesBefore || [1440, 120, 15];
 
         for (const remMin of reminders) {
           const reminderKey = `${apt.id}-${remMin}-${apt.date}-${apt.time}`;
           if (dispatchedKeys.has(reminderKey)) continue;
 
-          // If current time is within [remMin - 3, remMin + 3] minutes before event
-          // OR if event is due right now (remMin == 0 and diffMinutes <= 2 and diffMinutes >= -15)
           const isTriggerWindow =
             (remMin > 0 && diffMinutes <= remMin && diffMinutes >= remMin - 4) ||
             (remMin === 0 && diffMinutes <= 1 && diffMinutes >= -10);
@@ -306,18 +380,16 @@ export const AppointmentsProvider: React.FC<{ children: React.ReactNode }> = ({ 
             else if (remMin === 0) label = "Acontecendo AGORA!";
             else label = `Em ${remMin} minutos`;
 
-            console.log(`[LembraAI Dispatcher] Disparando lembrete: ${apt.title} (${label})`);
             await sendManualTelegramReminder(apt, label);
           }
         }
       }
     };
 
-    // Run check immediately and then every 30 seconds
     checkAndDispatchReminders();
     const interval = setInterval(checkAndDispatchReminders, 30000);
     return () => clearInterval(interval);
-  }, [user, profile, appointments, dispatchedKeys]);
+  }, [effectiveUserId, profile, appointments, dispatchedKeys]);
 
   // Stats calculation
   const stats = useMemo(() => {

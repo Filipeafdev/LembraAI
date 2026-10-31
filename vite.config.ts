@@ -11,11 +11,8 @@ function apiServerPlugin(): Plugin {
   return {
     name: 'api-server-plugin',
     configureServer(server) {
-      server.middlewares.use((req, res, next) => {
-        if (req.url?.startsWith('/api')) {
-          return (apiRouter as any)(req, res, next);
-        }
-        next();
+      server.middlewares.use('/api', (req, res, next) => {
+        return (apiRouter as any)(req, res, next);
       });
     },
   };

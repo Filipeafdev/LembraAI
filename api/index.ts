@@ -8,15 +8,28 @@ import {
   getBotToken,
 } from "./telegram.ts";
 
-export const apiRouter = express.Router();
+export const apiApp = express();
 
-// Parse JSON and increase payload limit for base64 image OCR
-apiRouter.use(express.json({ limit: "25mb" }));
-apiRouter.use(express.urlencoded({ extended: true, limit: "25mb" }));
+export const sendJson = (res: any, status: number, data: any) => {
+  try {
+    if (typeof res.status === "function" && typeof res.json === "function") {
+      return res.status(status).json(data);
+    }
+  } catch (e) {
+    // fallback
+  }
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.end(JSON.stringify(data));
+};
+
+// Body parsing
+apiApp.use(express.json({ limit: "25mb" }));
+apiApp.use(express.urlencoded({ extended: true, limit: "25mb" }));
 
 // Healthcheck
-apiRouter.get("/health", (_req: Request, res: Response) => {
-  res.json({
+apiApp.get("/health", (_req: Request, res: Response) => {
+  sendJson(res, 200, {
     status: "ok",
     appName: "LembraAI",
     telegramBotConfigured: Boolean(getBotToken()),
@@ -26,72 +39,71 @@ apiRouter.get("/health", (_req: Request, res: Response) => {
 });
 
 // Gemini: Parse image (OCR + extraction)
-apiRouter.post("/gemini/parse-image", async (req: Request, res: Response) => {
+apiApp.post("/gemini/parse-image", async (req: Request, res: Response) => {
   try {
     const { imageBase64, mimeType = "image/jpeg", referenceDate } = req.body;
     if (!imageBase64) {
-      return res.status(400).json({ error: "Imagem em base64 não fornecida." });
+      return sendJson(res, 400, { error: "Imagem em base64 não fornecida." });
     }
 
     const refDate = referenceDate || new Date().toISOString();
-    // Clean base64 string if it contains data URI prefix
     const cleanBase64 = imageBase64.replace(/^data:image\/[a-zA-Z+]+;base64,/, "");
 
     const extracted = await parseAppointmentFromImage(cleanBase64, mimeType, refDate);
-    return res.json({ success: true, data: extracted });
+    return sendJson(res, 200, { success: true, data: extracted });
   } catch (error: any) {
     console.error("Error parsing appointment from image:", error);
-    return res.status(500).json({
+    return sendJson(res, 500, {
       error: error.message || "Falha ao processar a imagem com Inteligência Artificial.",
     });
   }
 });
 
 // Gemini: Parse voice transcript / natural text
-apiRouter.post("/gemini/parse-voice-text", async (req: Request, res: Response) => {
+apiApp.post("/gemini/parse-voice-text", async (req: Request, res: Response) => {
   try {
     const { transcript, referenceDate } = req.body;
     if (!transcript || typeof transcript !== "string") {
-      return res.status(400).json({ error: "Texto transcrito não fornecido." });
+      return sendJson(res, 400, { error: "Texto transcrito não fornecido." });
     }
 
     const refDate = referenceDate || new Date().toISOString();
     const extracted = await parseAppointmentFromVoiceText(transcript, refDate);
-    return res.json({ success: true, data: extracted });
+    return sendJson(res, 200, { success: true, data: extracted });
   } catch (error: any) {
     console.error("Error parsing voice transcript:", error);
-    return res.status(500).json({
+    return sendJson(res, 500, {
       error: error.message || "Falha ao interpretar o comando de voz com Inteligência Artificial.",
     });
   }
 });
 
 // Telegram: Get bot info (username, status)
-apiRouter.get("/telegram/bot-info", async (_req: Request, res: Response) => {
+apiApp.get("/telegram/bot-info", async (_req: Request, res: Response) => {
   try {
     const info = await fetchBotInfo();
-    return res.json(info);
+    return sendJson(res, 200, info);
   } catch (error: any) {
-    return res.status(500).json({ ok: false, error: error.message });
+    return sendJson(res, 500, { ok: false, error: error.message });
   }
 });
 
 // Telegram: Get recent incoming messages to detect chat ID automatically
-apiRouter.get("/telegram/recent-chats", async (_req: Request, res: Response) => {
+apiApp.get("/telegram/recent-chats", async (_req: Request, res: Response) => {
   try {
     const result = await fetchRecentUpdates();
-    return res.json(result);
+    return sendJson(res, 200, result);
   } catch (error: any) {
-    return res.status(500).json({ ok: false, chats: [], error: error.message });
+    return sendJson(res, 500, { ok: false, chats: [], error: error.message });
   }
 });
 
 // Telegram: Send test message
-apiRouter.post("/telegram/test", async (req: Request, res: Response) => {
+apiApp.post("/telegram/test", async (req: Request, res: Response) => {
   try {
     const { chatId, userName, email } = req.body;
     if (!chatId) {
-      return res.status(400).json({
+      return sendJson(res, 400, {
         ok: false,
         error: "Chat ID do Telegram não informado. Por favor, preencha nas configurações.",
       });
@@ -99,33 +111,35 @@ apiRouter.post("/telegram/test", async (req: Request, res: Response) => {
 
     const result = await sendTestAlert(String(chatId), userName, email);
     if (result.ok) {
-      return res.json({ ok: true, message: "Mensagem de teste enviada com sucesso no Telegram!" });
+      return sendJson(res, 200, { ok: true, message: "Mensagem de teste enviada com sucesso no Telegram!" });
     } else {
-      return res.status(400).json({
+      return sendJson(res, 400, {
         ok: false,
         error: result.description || "Não foi possível enviar a mensagem no Telegram. Verifique se iniciou o bot com /start.",
       });
     }
   } catch (error: any) {
-    return res.status(500).json({ ok: false, error: error.message });
+    return sendJson(res, 500, { ok: false, error: error.message });
   }
 });
 
 // Telegram: Send appointment notification
-apiRouter.post("/telegram/send-reminder", async (req: Request, res: Response) => {
+apiApp.post("/telegram/send-reminder", async (req: Request, res: Response) => {
   try {
     const { chatId, appointment, timingLabel = "Lembrete de compromisso" } = req.body;
     if (!chatId || !appointment || !appointment.title) {
-      return res.status(400).json({ ok: false, error: "Dados insuficientes para envio." });
+      return sendJson(res, 400, { ok: false, error: "Dados insuficientes para envio." });
     }
 
     const result = await sendAppointmentAlert(String(chatId), appointment, timingLabel);
     if (result.ok) {
-      return res.json({ ok: true, messageId: result.messageId });
+      return sendJson(res, 200, { ok: true, messageId: result.messageId });
     } else {
-      return res.status(400).json({ ok: false, error: result.description });
+      return sendJson(res, 400, { ok: false, error: result.description });
     }
   } catch (error: any) {
-    return res.status(500).json({ ok: false, error: error.message });
+    return sendJson(res, 500, { ok: false, error: error.message });
   }
 });
+
+export const apiRouter = apiApp;

@@ -37,6 +37,8 @@ export async function fetchBotInfo(): Promise<TelegramBotInfo> {
   }
 }
 
+const welcomedUsers = new Set<string>();
+
 /**
  * Reads recent incoming messages from the bot to automatically detect the user's numeric Chat ID
  */
@@ -66,6 +68,15 @@ export async function fetchRecentUpdates(): Promise<{
             lastMessage: msg.text || "",
             date: msg.date,
           });
+
+          // If user sent /start and hasn't been welcomed yet, send immediate welcome reply!
+          if (msg.text?.startsWith("/start") && !welcomedUsers.has(chatId)) {
+            welcomedUsers.add(chatId);
+            sendTelegramMessage(
+              chatId,
+              `👋 <b>Olá, ${name}!</b>\n\nRecebemos seu comando <code>/start</code> com sucesso no <b>LembraAI</b>!\n\n🔑 Seu <b>Chat ID</b> é: <code>${chatId}</code>\n\nVolte agora ao aplicativo LembraAI e toque em <b>"Detectar Meu Chat ID"</b> para ativar o recebimento automático de lembretes!`
+            ).catch(() => {});
+          }
         }
       }
       return { ok: true, chats: Array.from(chatsMap.values()).reverse() };

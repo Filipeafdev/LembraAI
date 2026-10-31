@@ -63,28 +63,54 @@ export const TelegramSettingsModal: React.FC<TelegramSettingsModalProps> = ({
     }
   }, [profile?.telegramChatId]);
 
-  // Fetch bot info from server
+  // Fetch bot info and recent chats from server
   useEffect(() => {
     if (!isOpen) return;
-    const fetchInfo = async () => {
+
+    const fetchInfoAndChats = async () => {
       try {
         const res = await fetch("/api/telegram/bot-info");
-        const data = await res.json();
-        if (data.ok && data.username) {
-          setBotInfo({
-            username: data.username,
-            firstName: data.firstName || "LembraAI Bot",
-            loading: false,
-          });
-        } else {
+        const text = await res.text();
+        try {
+          const data = JSON.parse(text);
+          if (data.ok && data.username) {
+            setBotInfo({
+              username: data.username,
+              firstName: data.firstName || "LembraAI Bot",
+              loading: false,
+            });
+          } else {
+            setBotInfo((prev) => ({ ...prev, loading: false }));
+          }
+        } catch {
           setBotInfo((prev) => ({ ...prev, loading: false }));
         }
       } catch (e) {
         setBotInfo((prev) => ({ ...prev, loading: false }));
       }
+
+      // Check if user already interacted with the bot to auto-fill
+      try {
+        const resChats = await fetch("/api/telegram/recent-chats");
+        const chatsText = await resChats.text();
+        const dataChats = JSON.parse(chatsText);
+        if (dataChats.ok && Array.isArray(dataChats.chats) && dataChats.chats.length > 0) {
+          const latest = dataChats.chats[0];
+          if (!profile?.telegramChatId) {
+            setChatIdInput(latest.chatId);
+            setDetectNotice({
+              type: "success",
+              text: `Encontramos sua mensagem recente no Telegram! Chat ID: ${latest.chatId} (${latest.name}). Clique em "Testar Conexão" para confirmar.`,
+            });
+          }
+        }
+      } catch {
+        // silent check
+      }
     };
-    fetchInfo();
-  }, [isOpen]);
+
+    fetchInfoAndChats();
+  }, [isOpen, profile?.telegramChatId]);
 
   if (!isOpen) return null;
 
@@ -115,7 +141,13 @@ export const TelegramSettingsModal: React.FC<TelegramSettingsModalProps> = ({
 
     try {
       const res = await fetch("/api/telegram/recent-chats");
-      const data = await res.json();
+      const text = await res.text();
+      let data: any;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error("Resposta inesperada do servidor ao buscar mensagens.");
+      }
 
       if (data.ok && Array.isArray(data.chats) && data.chats.length > 0) {
         const latest: RecentChat = data.chats[0];
@@ -126,7 +158,7 @@ export const TelegramSettingsModal: React.FC<TelegramSettingsModalProps> = ({
           type: "success",
           text: `Chat ID detectado com sucesso: ${latest.chatId} (${latest.name}${
             latest.username ? ` • @${latest.username}` : ""
-          })!`,
+          })! Enviando teste...`,
         });
 
         // Trigger test immediately with detected ID
